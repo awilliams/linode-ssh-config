@@ -17,7 +17,9 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
 ## Usage
 
  * [Download](https://github.com/awilliams/linode-ssh-config/releases) the correct `linode-ssh-config` for your computer.
- * Find your [Linode API key](https://manager.linode.com/profile/api_key_create).
+
+ * Create a [Linode API key](https://manager.linode.com/profile/api_key_create).
+ 
  * Create your `linode-ssh-config` config file, editing your API key and other variables.
 
   `cp linode-ssh-config.ini.example ~/.linode-ssh-config.ini`
