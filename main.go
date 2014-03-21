@@ -18,6 +18,7 @@ type Configuration struct {
   ApiKey       string `gcfg:"api-key"`
   DisplayGroup []string `gcfg:"display-group"`
   User string `gcfg:"user"`
+  IdentityFile string `gcfg:"identity-file"`
 }
 
 func (self Configuration) ContainsDisplayGroup(g string) bool {

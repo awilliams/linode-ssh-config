@@ -1,0 +1,6 @@
+[linode]
+api-key = secretapikey         # Required
+display-group = Staging        # Optional - output only hosts in this display group.
+display-group = Production     #            Multiple display groups are allowed 
+user = bill                    # Optional - ssh user to use
+identity-file = ~/.ssh/linode  # Optional - ssh identity file

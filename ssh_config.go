@@ -120,11 +120,14 @@ func (self *SSHConfig) generatedConfig() ([]byte, error) {
       }
       entry := sshEntry{Host: linode.Label, Id: linode.Id}
       keyvals := make(map[string]string)
-      keyvals["#"] = fmt.Sprintf("[%s] Linode ID %d ", linode.DisplayGroup, linode.Id)
+      keyvals["#"] = fmt.Sprintf("%s | Linode ID %d | %dm Ram", linode.DisplayGroup, linode.Id, linode.Ram)
       keyvals["Hostname"] = linode.PublicIp()
       if self.config.User != "" {
         keyvals["User"] = self.config.User
-      }      
+      }
+	  if self.config.IdentityFile != "" {
+		  keyvals["IdentityFile"] = self.config.IdentityFile
+	  }
       entry.KeyVals = keyvals
       if err := template.Execute(buf, entry); err != nil {
         return nil, err
