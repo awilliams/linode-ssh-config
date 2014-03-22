@@ -1,16 +1,16 @@
 linode-ssh-config
 =================
 
-Generate your `~/.ssh/config` file with your Linode servers.
+Generates a `~/.ssh/config` file with your Linode servers, preserving existing configuration.
 
 Uses the Linode API to retrieve your hosts and generates the correct ssh config.
 Instead of connecting like
 
-    ssh bill@my.linode.server.com -i ~/.ssh/linode-rsa
+    ssh ubuntu@my.linode.server.com -i ~/.ssh/linode-rsa
 	
 you can connect like this
 
-    ssh MyLinodeHost
+    ssh MyLinodeLabel
 	
 See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/simplify-your-life-with-an-ssh-config-file/) for more information about ssh aliases and configuration options.
 
@@ -24,7 +24,7 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
 
   `cp linode-ssh-config.ini.example ~/.linode-ssh-config.ini`
 
- * Test the output
+ * The program only outputs to STDOUT, so we can first test the output.
 
   `./linode-ssh-config`
 
