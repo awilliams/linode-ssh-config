@@ -36,6 +36,12 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
  
   `./linode-ssh-config > config.tmp && mv config.tmp ~/.ssh/config`
 
+## Bash autocomplete
+
+Add this to your `.bashrc` or `.bash_profile` to enable ssh + TAB completion of your hosts
+
+    [ -e "$HOME/.ssh/config" ] && complete -o "default" -o "nospace" -W "$(grep "^Host" ~/.ssh/config | grep -v "[?*]" | cut -d " " -f2 | tr ' ' '\n')" scp sftp ssh
+
 ## Example output
 ```
 # Existing config
