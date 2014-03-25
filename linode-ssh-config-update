@@ -7,10 +7,7 @@ BIN=linode-ssh-config
 CONFIG=$HOME/.ssh/config
 
 if [ -f $CONFIG ]; then
-  mv $CONFIG $CONFIG.bak
-  echo "Backing up $CONFIG to $CONFIG.bak"
+  mv $CONFIG $CONFIG.bak && echo "Backing up $CONFIG to $CONFIG.bak"
 fi
 
-$BIN > $CONFIG.tmp && mv $CONFIG.tmp $CONFIG
-
-echo "Updated $CONFIG"
+$BIN > $CONFIG.tmp && mv $CONFIG.tmp $CONFIG && echo "Updated $CONFIG"
