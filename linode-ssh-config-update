@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# Update your .ssh/config using linode-ssh-config, first making a copy of the current config
+# https://github.com/awilliams/linode-ssh-config
+
+BIN=linode-ssh-config
+CONFIG=$HOME/.ssh/config
+
+if [ -f $CONFIG ]; then
+  mv $CONFIG $CONFIG.bak
+  echo "Backing up $CONFIG to $CONFIG.bak"
+fi
+
+$BIN > $CONFIG.tmp && mv $CONFIG.tmp $CONFIG
+
+echo "Updated $CONFIG"

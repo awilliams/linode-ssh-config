@@ -28,6 +28,12 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
 
   `./linode-ssh-config`
 
+ * Run the included `linode-ssh-config-update` bash script (which does the following steps automatically), or continue.
+
+  `./linode-ssh-config-update`
+
+**Manual update process** (not using `linode-ssh-config-update`)
+
  * Make a backup of your exisiting ssh config
   
   `cp ~/.ssh/config ~/.ssh/config.bak`
