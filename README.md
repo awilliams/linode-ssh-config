@@ -18,35 +18,29 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
 
  * [Download](https://github.com/awilliams/linode-ssh-config/releases) the correct `linode-ssh-config` for your computer.
 
- * Create a [Linode API key](https://manager.linode.com/profile/api_key_create).
+ * Create a [Linode API key](https://manager.linode.com/profile/api_key_create). (Click on `my profile` -> `API Keys`)
  
  * Create your `linode-ssh-config` config file, editing your API key and other variables.
 
   `cp linode-ssh-config.ini.example ~/.linode-ssh-config.ini`
 
- * The program only outputs to STDOUT, so we can first test the output.
+ * First test the output.
 
   `./linode-ssh-config`
-
- * Run the included `linode-ssh-config-update` bash script (which does the following steps automatically), or continue.
-
-  `./linode-ssh-config-update`
-
-**Manual update process** (not using `linode-ssh-config-update`)
 
  * Make a backup of your exisiting ssh config
   
   `cp ~/.ssh/config ~/.ssh/config.bak`
 
- * Generate and overwrite your current config. Do **NOT** write directly to your current config file. `linode-ssh-config` attempts to keep your existing configuration and append to it, but writting directly to the current config file will remove any existing configuration.
- 
-  `./linode-ssh-config > config.tmp && mv config.tmp ~/.ssh/config`
+ * Update the `~/.ssh/config` file.
 
-## Bash autocomplete
+  `./linode-ssh-config --update`
 
-Add this to your `.bashrc` or `.bash_profile` to enable ssh + TAB completion of your hosts
+## Pretty Print
 
-    [ -e "$HOME/.ssh/config" ] && complete -o "default" -o "nospace" -W "$(grep "^Host" ~/.ssh/config | grep -v "[?*]" | cut -d " " -f2 | tr ' ' '\n')" scp sftp ssh
+See a nicely formatted list of your linodes.
+
+    `./linode-ssh-config --pp`
 
 ## Example output
 ```

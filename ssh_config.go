@@ -4,16 +4,19 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/awilliams/linode-ssh-config/api"
+	"io"
+	"io/ioutil"
 	"os"
 	"os/user"
 	"path"
 	"text/template"
+
+	"github.com/awilliams/linode-ssh-config/api"
 )
 
 type SSHConfig struct {
 	linodes api.Linodes
-	file    *os.File
+	path    string
 	config  Configuration
 }
 
@@ -24,22 +27,24 @@ func NewSSHConfig(config Configuration, linodes api.Linodes) (*SSHConfig, error)
 	if err != nil {
 		return nil, err
 	}
-	configPath := path.Join(usr.HomeDir, SSH_CONFIG_PATH)
+	path := path.Join(usr.HomeDir, SSH_CONFIG_PATH)
 
-	exists := true
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		exists = false
-	}
+	return &SSHConfig{linodes: linodes, path: path, config: config}, nil
+}
 
-	var file *os.File
-	if exists {
-		file, err = os.Open(configPath)
+// write to the rendered config to disk, making a backup if possible
+func (self *SSHConfig) update() error {
+	if fileExists(self.path) {
+		err := copyFile(self.path, self.path+".linode-ssh-config.bak")
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-
-	return &SSHConfig{linodes: linodes, file: file, config: config}, nil
+	contents, err := self.render()
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(self.path, contents, 0644)
 }
 
 // combine the user's config and the generated config
@@ -62,13 +67,20 @@ var END_TOKEN []byte = []byte("##### END GENERATED LINODE-SSH-CONFIG #####")
 
 // read the user's .ssh/config file, and strip out any previously generated config
 func (self *SSHConfig) usersConfig() ([]byte, error) {
-	if self.file == nil {
+	if !fileExists(self.path) {
 		return []byte{}, nil
 	}
+
+	file, err := os.Open(self.path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
 	insideConfigBlock := false
 
 	strippedBuf := new(bytes.Buffer)
-	scanner := bufio.NewScanner(self.file)
+	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		if !insideConfigBlock && bytes.Equal(scanner.Bytes(), START_TOKEN) {
 			insideConfigBlock = true
@@ -138,4 +150,33 @@ func (self *SSHConfig) generatedConfig() ([]byte, error) {
 
 	buf.Write(append(END_TOKEN, '\n'))
 	return buf.Bytes(), nil
+}
+
+func fileExists(path string) bool {
+	exists := true
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		exists = false
+	}
+	return exists
+}
+
+func copyFile(in, out string) error {
+	i, err := os.Open(in)
+	if err != nil {
+		return err
+	}
+	defer i.Close()
+
+	o, err := os.Create(out)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+
+	_, err = io.Copy(o, i)
+	if err != nil {
+		return err
+	}
+
+	return o.Sync()
 }

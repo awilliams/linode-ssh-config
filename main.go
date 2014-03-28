@@ -1,15 +1,15 @@
 package main
 
 import (
-	"code.google.com/p/gcfg"
 	"fmt"
-	"github.com/awilliams/linode-ssh-config/api"
-	"github.com/mgutz/ansi"
 	"log"
-	//"flag"
 	"os"
 	"os/user"
 	"path"
+
+	"code.google.com/p/gcfg"
+	"github.com/awilliams/linode-ssh-config/api"
+	"github.com/mgutz/ansi"
 )
 
 const CONFIG_NAME = ".linode-ssh-config.ini"
@@ -89,6 +89,18 @@ func sshConfigPrintLinodes(config Configuration, l api.Linodes) {
 	fmt.Print(string(bytes))
 }
 
+func sshConfigUpdate(config Configuration, l api.Linodes) {
+	sshConfig, err := NewSSHConfig(config, l)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = sshConfig.update()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Updated!")
+}
+
 func main() {
 	config, err := loadConfig()
 	if err != nil {
@@ -100,8 +112,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "--list" {
-		prettyPrintLinodes(linodes)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--pp":
+			prettyPrintLinodes(linodes)
+		case "--update":
+			sshConfigUpdate(*config, linodes)
+		default:
+			log.Fatal("Unrecognized argument")
+		}
 	} else {
 		sshConfigPrintLinodes(*config, linodes)
 	}
