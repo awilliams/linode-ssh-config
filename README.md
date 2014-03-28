@@ -40,7 +40,7 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
 
 See a nicely formatted list of your linodes.
 
-    `./linode-ssh-config --pp`
+    ./linode-ssh-config --pp
 
 ## Example output
 ```
