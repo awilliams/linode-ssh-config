@@ -16,7 +16,7 @@ import (
 
 type SSHConfig struct {
 	linodes api.Linodes
-	path    string
+	Path    string
 	config  Configuration
 }
 
@@ -27,15 +27,15 @@ func NewSSHConfig(config Configuration, linodes api.Linodes) (*SSHConfig, error)
 	if err != nil {
 		return nil, err
 	}
-	path := path.Join(usr.HomeDir, SSH_CONFIG_PATH)
+	p := path.Join(usr.HomeDir, SSH_CONFIG_PATH)
 
-	return &SSHConfig{linodes: linodes, path: path, config: config}, nil
+	return &SSHConfig{linodes: linodes, Path: p, config: config}, nil
 }
 
 // write to the rendered config to disk, making a backup if possible
 func (self *SSHConfig) update() error {
-	if fileExists(self.path) {
-		err := copyFile(self.path, self.path+".linode-ssh-config.bak")
+	if fileExists(self.Path) {
+		err := copyFile(self.Path, self.Path+".linode-ssh-config.bak")
 		if err != nil {
 			return err
 		}
@@ -44,7 +44,7 @@ func (self *SSHConfig) update() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(self.path, contents, 0644)
+	return ioutil.WriteFile(self.Path, contents, 0644)
 }
 
 // combine the user's config and the generated config
@@ -67,11 +67,11 @@ var END_TOKEN []byte = []byte("##### END GENERATED LINODE-SSH-CONFIG #####")
 
 // read the user's .ssh/config file, and strip out any previously generated config
 func (self *SSHConfig) usersConfig() ([]byte, error) {
-	if !fileExists(self.path) {
+	if !fileExists(self.Path) {
 		return []byte{}, nil
 	}
 
-	file, err := os.Open(self.path)
+	file, err := os.Open(self.Path)
 	if err != nil {
 		return nil, err
 	}

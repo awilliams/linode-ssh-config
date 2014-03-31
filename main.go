@@ -98,7 +98,27 @@ func sshConfigUpdate(config Configuration, l api.Linodes) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Updated!")
+	fmt.Printf("Updated %s with %d Linodes\n", sshConfig.Path, l.Size())
+}
+
+func linodes(config *Configuration) api.Linodes {
+	linodes, err := api.FetchLinodesWithIps(config.ApiKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return linodes
+}
+
+func printHelp() {
+	help := `Generate your .ssh/config file with aliases to your Linodes
+  
+  Usage:        
+  (no args)     Prints generated ssh config to stdout
+  --pp          Nicely formatted list of linodes
+  --update      Writes generated ssh config to ~/.ssh/config
+  --help        Print this message
+ `
+	fmt.Println(help)
 }
 
 func main() {
@@ -107,21 +127,23 @@ func main() {
 		log.Fatal(err)
 	}
 
-	linodes, err := api.FetchLinodesWithIps(config.ApiKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "--pp":
-			prettyPrintLinodes(linodes)
+			prettyPrintLinodes(linodes(config))
 		case "--update":
-			sshConfigUpdate(*config, linodes)
+			sshConfigUpdate(*config, linodes(config))
+		case "help":
+			printHelp()
+		case "-h":
+			printHelp()
+		case "--help":
+			printHelp()
 		default:
+			printHelp()
 			log.Fatal("Unrecognized argument")
 		}
 	} else {
-		sshConfigPrintLinodes(*config, linodes)
+		sshConfigPrintLinodes(*config, linodes(config))
 	}
 }

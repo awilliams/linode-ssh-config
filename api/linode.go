@@ -48,6 +48,14 @@ func (self Linodes) Ids() []int {
 	return ids
 }
 
+func (self Linodes) Size() int {
+	s := 0
+	for _, grp := range self {
+		s += len(grp)
+	}
+	return s
+}
+
 type Linode struct {
 	Id           int    `json:"LINODEID"`
 	Status       int    `json:"STATUS"`
