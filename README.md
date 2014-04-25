@@ -38,6 +38,13 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
 The update command can be run repeatedly, as it replaces any previously generated configuration with the update configuration. 
 
     linode-ssh-config --update
+    
+## Bash Autocomplete
+
+To enable `ssh` autocompletion, add the following to your bash profile
+
+    # Add tab completion for SSH hostnames based on ~/.ssh/config, ignoring wildcards
+    [ -e "$HOME/.ssh/config" ] && complete -o "default" -o "nospace" -W "$(grep "^Host" ~/.ssh/config | grep -v "[?*]" | cut -d " " -f2 | tr ' ' '\n')" scp sftp ssh
 
 ## Pretty Print
 
