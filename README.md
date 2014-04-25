@@ -11,6 +11,10 @@ linode-ssh-config
 	
 See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/simplify-your-life-with-an-ssh-config-file/) for more information about ssh aliases and configuration options.
 
+## Download
+
+[Releases](https://github.com/awilliams/linode-ssh-config/releases)
+
 ## Quickstart
 
  * [Download](https://github.com/awilliams/linode-ssh-config/releases) the `linode-ssh-config` binary.
