@@ -12,7 +12,10 @@ import (
 	"github.com/mgutz/ansi"
 )
 
-const CONFIG_NAME = ".linode-ssh-config.ini"
+const (
+	CONFIG_NAME = ".linode-ssh-config.ini"
+	VERSION     = "0.0.1"
+)
 
 type Configuration struct {
 	ApiKey       string   `gcfg:"api-key"`
@@ -109,14 +112,19 @@ func linodes(config *Configuration) api.Linodes {
 	return linodes
 }
 
+func printVersion() {
+	fmt.Printf("linode-ssh-config v%s\n", VERSION)
+}
+
 func printHelp() {
-	help := `Generate your .ssh/config file with aliases to your Linodes
+	help := `Update your .ssh/config with aliases to your Linodes
   
   Usage:        
   (no args)     Prints generated ssh config to stdout
-  --pp          Nicely formatted list of linodes
   --update      Writes generated ssh config to ~/.ssh/config
+  --pp          Nicely formatted list of linodes
   --help        Print this message
+  --version     Print version to stdout
  `
 	fmt.Println(help)
 }
@@ -139,9 +147,14 @@ func main() {
 			printHelp()
 		case "--help":
 			printHelp()
+		case "version":
+			printVersion()
+		case "--version":
+			printVersion()
 		default:
 			printHelp()
-			log.Fatal("Unrecognized argument")
+			fmt.Println("Unrecognized argument")
+			os.Exit(1)
 		}
 	} else {
 		sshConfigPrintLinodes(*config, linodes(config))
