@@ -1,5 +1,5 @@
 BIN=linode-ssh-config
-VERSION=0.0.1
+VERSION=0.0.2
 README=README.md
 LICENSE=LICENSE
 EXAMPLE_INI=linode-ssh-config.ini.example
