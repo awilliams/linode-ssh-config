@@ -1,8 +1,12 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 func FetchLinodesWithIps(apiKey string) (Linodes, error) {
@@ -94,16 +98,26 @@ func (self *Linode) IsRunning() bool {
 func FetchLinodeList(api apiRequest) (Linodes, error) {
 	api.AddAction("linode.list")
 
-	var jsonData struct {
-		Linodes []Linode `json:"DATA,omitempty"`
+	datas, errs := api.GetJson()
+	if len(errs) > 0 {
+		errMsg := make([]string, len(errs))
+		for i, err := range errs {
+			errMsg[i] = err.Error()
+		}
+		return nil, errors.New(strings.Join(errMsg, "\n"))
 	}
-	err := api.GetJson(&jsonData)
+
+	var err error
+	if len(datas) != 1 {
+		return nil, fmt.Errorf("unexpected numbers of results")
+	}
+	var ls []Linode
+	err = json.Unmarshal(datas[0], &ls)
 	if err != nil {
 		return nil, err
 	}
-
-	linodes := make(Linodes)
-	for _, linode := range jsonData.Linodes {
+	linodes := make(Linodes, len(ls))
+	for _, linode := range ls {
 		l := linode
 		linodes[linode.DisplayGroup] = append(linodes[linode.DisplayGroup], &l)
 	}
@@ -116,8 +130,8 @@ type LinodeIps map[int][]*LinodeIp
 
 type LinodeIp struct {
 	LinodeId int    `json:"LINODEID"`
-	Ip       string `json:"IPADDRESS"`
 	Public   int    `json:"ISPUBLIC"`
+	Ip       string `json:"IPADDRESS"`
 }
 
 func FetchLinodeIpList(api apiRequest, linodeIds []int) (LinodeIps, error) {
@@ -128,17 +142,24 @@ func FetchLinodeIpList(api apiRequest, linodeIds []int) (LinodeIps, error) {
 		action.Set("LinodeID", strconv.Itoa(linodeId))
 	}
 
-	var jsonData []struct {
-		LinodeIps []LinodeIp `json:"DATA"`
-	}
-	err := api.GetJson(&jsonData)
-	if err != nil {
-		return nil, err
+	datas, errs := api.GetJson()
+	if len(errs) > 0 {
+		errMsg := make([]string, len(errs))
+		for i, err := range errs {
+			errMsg[i] = err.Error()
+		}
+		return nil, errors.New(strings.Join(errMsg, "\n"))
 	}
 
-	linodeIps := make(LinodeIps)
-	for _, ipList := range jsonData {
-		for _, linodeIp := range ipList.LinodeIps {
+	var err error
+	linodeIps := make(LinodeIps, len(datas))
+	for _, rawJson := range datas {
+		var ipList []LinodeIp
+		err = json.Unmarshal(rawJson, &ipList)
+		if err != nil {
+			return nil, err
+		}
+		for _, linodeIp := range ipList {
 			i := linodeIp
 			linodeIps[linodeIp.LinodeId] = append(linodeIps[linodeIp.LinodeId], &i)
 		}

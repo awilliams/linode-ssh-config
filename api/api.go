@@ -1,17 +1,16 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 )
 
 const (
-	API_URL = "https://api.linode.com/"
+	ApiUrl           = "https://api.linode.com/"
+	MaxBatchRequests = 25
 )
 
 type queryParams map[string]string
@@ -37,7 +36,7 @@ type apiRequest struct {
 }
 
 func NewApiRequest(apiKey string) (*apiRequest, error) {
-	apiUrl, err := url.Parse(API_URL)
+	apiUrl, err := url.Parse(ApiUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -51,91 +50,70 @@ func (self *apiRequest) AddAction(method string) *apiAction {
 	return action
 }
 
-func (self apiRequest) URL() string {
-	params := make(url.Values)
-	params.Set("api_key", self.apiKey)
+func (self apiRequest) URL() []string {
+	actionBatches := make([][]*apiAction, (len(self.actions)/MaxBatchRequests)+1)
+	for j, action := range self.actions {
+		i := j / MaxBatchRequests
+		actionBatches[i] = append(actionBatches[i], action)
+	}
 
-	if len(self.actions) == 1 {
-		for key, value := range self.actions[0].values() {
-			params.Set(key, value)
-		}
-	} else if len(self.actions) > 1 {
+	var urls []string
+	for _, actions := range actionBatches {
+		params := make(url.Values)
+		params.Set("api_key", self.apiKey)
 		params.Set("api_action", "batch")
 		var requestArray []queryParams
-		for _, action := range self.actions {
+		for _, action := range actions {
 			requestArray = append(requestArray, action.values())
 		}
-		b, err := json.Marshal(requestArray)
-		if err != nil {
-			log.Fatal(err)
-		}
+		b, _ := json.Marshal(requestArray)
 		params.Set("api_requestArray", string(b))
+		u := self.baseUrl
+		u.RawQuery = params.Encode()
+		urls = append(urls, u.String())
 	}
-	self.baseUrl.RawQuery = params.Encode()
-	return self.baseUrl.String()
+	return urls
 }
 
-func (self apiRequest) GetJson(data interface{}) error {
-	resp, err := http.Get(self.URL())
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	// the linode API does not use HTTP status codes to indicate errors,
-	// rather it embeds in the JSON document the errors. When there is an error
-	// the foramt of the `DATA` element changes as well, which would cause the json decode to fail.
-	//
-	// Here we first parse the json to see if it contains errors, then re-parse with the provided
-	// json structure
-	if linodeErr := checkForLinodeError(bytes.NewReader(body)); linodeErr != nil {
-		return linodeErr
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	err = decoder.Decode(data)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type errorJson struct {
+type apiResponse struct {
+	Action string `json:"ACTION"`
 	Errors []struct {
 		Code    int    `json:"ERRORCODE"`
 		Message string `json:"ERRORMESSAGE"`
 	} `json:"ERRORARRAY,omitempty"`
+	Data json.RawMessage `json:"DATA,omitempty"`
 }
 
-func checkForLinodeError(body *bytes.Reader) error {
-	data := new(errorJson)
-	decoder := json.NewDecoder(body)
-	err := decoder.Decode(&data)
-	if err != nil {
-		// this is not actually an error, since there is not always an error present in the JSON
-		return nil
-	}
-	if len(data.Errors) > 0 {
-		var buf bytes.Buffer
-		buf.WriteString("Api Error!\n")
-		for _, e := range data.Errors {
-			buf.WriteString(fmt.Sprintf("[Code: %d] %s\n", e.Code, e.Message))
+func (self apiRequest) GetJson() ([]json.RawMessage, []error) {
+	var datas []json.RawMessage
+	var errs []error
+
+	for _, url := range self.URL() {
+		resp, err := http.Get(url)
+		if err != nil {
+			return nil, []error{err}
 		}
-		return fmt.Errorf(buf.String())
-	}
-	return nil
-}
+		defer resp.Body.Close()
 
-func (self *apiRequest) GoString() string {
-	s, err := url.QueryUnescape(self.URL())
-	if err != nil {
-		return ""
+		decoder := json.NewDecoder(resp.Body)
+
+		var apiResponses []apiResponse
+		err = decoder.Decode(&apiResponses)
+		if err != nil {
+			return nil, []error{err}
+		}
+
+		for _, apiResp := range apiResponses {
+			// Check for 'ERROR' attribute for any values, which would indicate an error
+			if len(apiResp.Errors) > 0 {
+				for _, e := range apiResp.Errors {
+					errs = append(errs, errors.New(fmt.Sprintf("[Code: %d] %s\n", e.Code, e.Message)))
+				}
+				continue
+			}
+			datas = append(datas, apiResp.Data)
+		}
 	}
-	return s
+
+	return datas, errs
 }
