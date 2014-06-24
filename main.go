@@ -1,162 +1,196 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/user"
-	"path"
+	"path/filepath"
+	"sort"
+	"strings"
+	"text/tabwriter"
 
-	"code.google.com/p/gcfg"
-	"github.com/awilliams/linode-ssh-config/api"
-	"github.com/mgutz/ansi"
+	"github.com/awilliams/linode"
 )
 
-const (
-	CONFIG_NAME = ".linode-ssh-config.ini"
-	VERSION     = "0.0.1"
-)
-
-type Configuration struct {
-	ApiKey       string   `gcfg:"api-key"`
-	DisplayGroup []string `gcfg:"display-group"`
-	User         string   `gcfg:"user"`
-	IdentityFile string   `gcfg:"identity-file"`
+var args struct {
+	help       bool
+	version    bool
+	pp         bool
+	update     bool
+	stdout     bool
+	configPath string
+	sshPath    string
 }
 
-func (self Configuration) ContainsDisplayGroup(g string) bool {
-	if len(self.DisplayGroup) == 0 {
-		return true
-	}
-	for _, configDisplayGroup := range self.DisplayGroup {
-		if configDisplayGroup == g {
-			return true
-		}
-	}
-	return false
+func init() {
+	flag.BoolVar(&args.help, "h", false, "Print help/usage")
+	flag.BoolVar(&args.version, "v", false, "Print version")
+	flag.BoolVar(&args.pp, "pp", false, "Print Linodes in nicely formatted manner")
+	flag.BoolVar(&args.update, "update", false, "Update ssh config file with rendered config")
+	flag.BoolVar(&args.stdout, "o", true, "Print rendered config")
+	flag.StringVar(&args.configPath, "c", "~/.linode-ssh-config.ini", "Path to configuration file")
+	flag.StringVar(&args.sshPath, "F", "~/.ssh/config", "Path to SSH config file")
 }
 
-func loadConfig() (*Configuration, error) {
-	usr, err := user.Current()
+var linodeClient *linode.Client
+var config *configuration
+
+func main() {
+	flag.Parse()
+	var err error
+	configPath, err := expandPath(args.configPath)
 	if err != nil {
-		return nil, err
+		fatal(err)
 	}
-	configPath := path.Join(usr.HomeDir, CONFIG_NAME)
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("No config file found at: %s", configPath)
-	}
-
-	var iniConfig struct {
-		Linode Configuration
-	}
-	err = gcfg.ReadFileInto(&iniConfig, configPath)
+	config, err = loadConfig(configPath)
 	if err != nil {
-		return nil, err
+		fatal(err)
 	}
+	linodeClient = linode.NewClient(config.APIKey)
 
-	return &iniConfig.Linode, nil
+	switch true {
+	case args.help:
+		printHelp()
+	case args.version:
+		printVersion()
+	case args.pp:
+		printPrettyLinodes()
+	case args.update:
+		updateSSHConfig()
+	case args.stdout:
+		printSSHConfig()
+	default:
+		printHelp()
+	}
 }
 
-func prettyPrintLinodes(l api.Linodes) {
-	for displayGroup, linodes := range l {
-		fmt.Printf("%s\t[%d]\n\n", ansi.Color(displayGroup, "green"), len(linodes))
-		for _, linode := range linodes {
-			labelColor := "magenta"
-			if linode.Status != 1 {
-				labelColor = "blue"
-			}
-			fmt.Printf(" * %-25s\tRunning=%v, Ram=%d, LinodeId=%d\n", ansi.Color(linode.Label, labelColor), linode.Status == 1, linode.Ram, linode.Id)
-			for _, ip := range linode.Ips {
-				var ipType string
-				if ip.Public == 1 {
-					ipType = "Public"
+func printPrettyLinodes() {
+	m := linodes()
+	displayGroups := make(sort.StringSlice, len(m))
+	i := 0
+	for displayGroup := range m {
+		displayGroups[i] = displayGroup
+		i++
+	}
+	sort.Sort(displayGroups)
+
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 1, 1, 2, ' ', 0)
+	var ipType string
+	for _, displayGroup := range displayGroups {
+		nodes := m[displayGroup]
+		fmt.Fprintf(w, "%s (%d)\t\t\t\n", displayGroup, len(nodes))
+		fmt.Fprintln(w, "Label\tRunning\tRam\tLinodeId")
+		fmt.Fprintln(w, "\t\t\t")
+
+		for _, nodeWithIPs := range nodes {
+			fmt.Fprintf(w, "%s\t%v\t%d\t%d\n", nodeWithIPs.node.Label, nodeWithIPs.node.IsRunning(), nodeWithIPs.node.RAM, nodeWithIPs.node.ID)
+			for _, ip := range nodeWithIPs.ips {
+				if ip.IsPublic() {
+					ipType = "public"
 				} else {
-					ipType = "Private"
+					ipType = "private"
 				}
-				fmt.Printf("   %-15s\t%s\n", ip.Ip, ipType)
+				fmt.Fprintf(w, "%s\t%s\t\t\n", ip.IP, ipType)
 			}
-			fmt.Println("")
+			fmt.Fprintln(w, "\t\t\t")
 		}
 	}
+	w.Flush()
 }
 
-func sshConfigPrintLinodes(config Configuration, l api.Linodes) {
-	sshConfig, err := NewSSHConfig(config, l)
+func printSSHConfig() {
+	sshPath, err := expandPath(args.sshPath)
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
-	bytes, err := sshConfig.render()
+	cfg := newSSHConfig(sshPath)
+	bytes, err := cfg.render()
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 	fmt.Print(string(bytes))
 }
 
-func sshConfigUpdate(config Configuration, l api.Linodes) {
-	sshConfig, err := NewSSHConfig(config, l)
+func updateSSHConfig() {
+	sshPath, err := expandPath(args.sshPath)
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
-	err = sshConfig.update()
-	if err != nil {
-		log.Fatal(err)
+	cfg := newSSHConfig(sshPath)
+	if err = cfg.update(); err != nil {
+		fatal(err)
 	}
-	fmt.Printf("Updated %s with %d Linodes\n", sshConfig.Path, l.Size())
-}
-
-func linodes(config *Configuration) api.Linodes {
-	linodes, err := api.FetchLinodesWithIps(config.ApiKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return linodes
+	fmt.Printf("Updated %s with %d Linodes\n", cfg.path, cfg.count)
 }
 
 func printVersion() {
-	fmt.Printf("linode-ssh-config v%s\n", VERSION)
+	fmt.Printf("%s v%s\n", appName, appVersion)
 }
+
+const usage = "usage: %s <flag>\n\nflags:\n"
 
 func printHelp() {
-	help := `Update your .ssh/config with aliases to your Linodes
-  
-  Usage:        
-  (no args)     Prints generated ssh config to stdout
-  --update      Writes generated ssh config to ~/.ssh/config
-  --pp          Nicely formatted list of linodes
-  --help        Print this message
-  --version     Print version to stdout
- `
-	fmt.Println(help)
+	fmt.Printf(usage, appName)
+	flag.PrintDefaults()
 }
 
-func main() {
-	config, err := loadConfig()
+type linodeWithIPs struct {
+	node linode.Linode
+	ips  []linode.LinodeIP
+}
+
+// linodes grouped by their DisplayGroup, filtered by the DisplayGroups specified in the config file
+func linodes() map[string][]*linodeWithIPs {
+	nodes, err := linodeClient.LinodeList()
 	if err != nil {
-		log.Fatal(err)
+		fatal(err)
 	}
 
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "--pp":
-			prettyPrintLinodes(linodes(config))
-		case "--update":
-			sshConfigUpdate(*config, linodes(config))
-		case "help":
-			printHelp()
-		case "-h":
-			printHelp()
-		case "--help":
-			printHelp()
-		case "version":
-			printVersion()
-		case "--version":
-			printVersion()
-		default:
-			printHelp()
-			fmt.Println("Unrecognized argument")
-			os.Exit(1)
+	m := make(map[int]*linodeWithIPs, len(nodes))
+	ret := make(map[string][]*linodeWithIPs, len(nodes))
+	ids := make([]int, 0, len(nodes))
+	for _, n := range nodes {
+		if config.filterRunning(n.IsRunning()) && config.filterDisplayGroup(n.DisplayGroup) {
+			v := &linodeWithIPs{node: n}
+			m[n.ID] = v
+			ret[n.DisplayGroup] = append(ret[n.DisplayGroup], v)
+			ids = append(ids, n.ID)
 		}
-	} else {
-		sshConfigPrintLinodes(*config, linodes(config))
 	}
+
+	ipMap, err := linodeClient.LinodeIPList(ids)
+	if err != nil {
+		fatal(err)
+	}
+	for nodeID, ips := range ipMap {
+		m[nodeID].ips = ips
+	}
+
+	return ret
+}
+
+func expandPath(p string) (string, error) {
+	if p[:2] == "~/" {
+		usr, err := user.Current()
+		if err != nil {
+			return p, err
+		}
+		p = strings.Replace(p, "~", usr.HomeDir, 1)
+	}
+	return filepath.Abs(p)
+}
+
+func fileExists(path string) bool {
+	exists := true
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		exists = false
+	}
+	return exists
+}
+
+func fatal(v interface{}) {
+	fmt.Fprintln(os.Stderr, v)
+	os.Exit(1)
 }

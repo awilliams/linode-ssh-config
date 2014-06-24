@@ -7,54 +7,26 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/user"
-	"path"
 	"text/template"
-
-	"github.com/awilliams/linode-ssh-config/api"
 )
 
-type SSHConfig struct {
-	linodes api.Linodes
-	Path    string
-	config  Configuration
+func newSSHConfig(p string) *sshConfig {
+	return &sshConfig{path: p}
 }
 
-const SSH_CONFIG_PATH = ".ssh/config"
-
-func NewSSHConfig(config Configuration, linodes api.Linodes) (*SSHConfig, error) {
-	usr, err := user.Current()
-	if err != nil {
-		return nil, err
-	}
-	p := path.Join(usr.HomeDir, SSH_CONFIG_PATH)
-
-	return &SSHConfig{linodes: linodes, Path: p, config: config}, nil
+type sshConfig struct {
+	path  string
+	count int // number of linodes. valid until next call to generatedConfig
 }
 
-// write to the rendered config to disk, making a backup if possible
-func (self *SSHConfig) update() error {
-	if fileExists(self.Path) {
-		err := copyFile(self.Path, self.Path+".linode-ssh-config.bak")
-		if err != nil {
-			return err
-		}
-	}
-	contents, err := self.render()
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(self.Path, contents, 0644)
-}
-
-// combine the user's config and the generated config
-func (self *SSHConfig) render() ([]byte, error) {
-	users, err := self.usersConfig()
+// return the ssh config as a byte slice with the users' previous config and generated config
+func (c *sshConfig) render() ([]byte, error) {
+	users, err := c.usersConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	generated, err := self.generatedConfig()
+	generated, err := c.generatedConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -62,27 +34,42 @@ func (self *SSHConfig) render() ([]byte, error) {
 	return append(users, generated...), nil
 }
 
-var START_TOKEN []byte = []byte("##### START GENERATED LINODE-SSH-CONFIG #####")
-var END_TOKEN []byte = []byte("##### END GENERATED LINODE-SSH-CONFIG #####")
+// write to the rendered config to disk, making a backup if possible
+func (c *sshConfig) update() error {
+	if fileExists(c.path) {
+		err := copyFile(c.path, c.path+".linode-ssh-config.bak")
+		if err != nil {
+			return err
+		}
+	}
+	contents, err := c.render()
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(c.path, contents, 0644)
+}
 
-// read the user's .ssh/config file, and strip out any previously generated config
-func (self *SSHConfig) usersConfig() ([]byte, error) {
-	if !fileExists(self.Path) {
+var startToken = []byte("##### START GENERATED LINODE-SSH-CONFIG #####")
+var endToken = []byte("##### END GENERATED LINODE-SSH-CONFIG #####")
+
+// read the user's ssh config file, and strip out any previously generated config
+func (c *sshConfig) usersConfig() ([]byte, error) {
+	if !fileExists(c.path) {
 		return []byte{}, nil
 	}
 
-	file, err := os.Open(self.Path)
+	f, err := os.Open(c.path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer f.Close()
 
 	insideConfigBlock := false
 
 	strippedBuf := new(bytes.Buffer)
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		if !insideConfigBlock && bytes.Equal(scanner.Bytes(), START_TOKEN) {
+		if !insideConfigBlock && bytes.Equal(scanner.Bytes(), startToken) {
 			insideConfigBlock = true
 		}
 
@@ -93,7 +80,7 @@ func (self *SSHConfig) usersConfig() ([]byte, error) {
 			}
 		}
 
-		if insideConfigBlock && bytes.Equal(scanner.Bytes(), END_TOKEN) {
+		if insideConfigBlock && bytes.Equal(scanner.Bytes(), endToken) {
 			insideConfigBlock = false
 		}
 	}
@@ -107,57 +94,60 @@ func (self *SSHConfig) usersConfig() ([]byte, error) {
 
 type sshEntry struct {
 	Host    string
-	Id      int
 	KeyVals map[string]string
 }
 
 const entryTemplate = `Host {{ .Host }}{{ range $k, $v := .KeyVals }}
         {{ $k }} {{ $v }}{{ end }}
-        
+
 `
 
 // create the generated config section
-func (self *SSHConfig) generatedConfig() ([]byte, error) {
+func (c *sshConfig) generatedConfig() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	buf.Write(append(START_TOKEN, []byte{'\n', '\n'}...))
+	buf.Write(startToken)
+	buf.WriteRune('\n')
+	buf.WriteRune('\n')
 
-	template := template.Must(template.New("entry").Parse(entryTemplate))
-	for displayGroup, displayGroupLinodes := range self.linodes {
-		if !self.config.ContainsDisplayGroup(displayGroup) {
-			continue
+	c.count = 0
+	tpl := template.Must(template.New("entry").Parse(entryTemplate))
+	for displayGroup, nodes := range linodes() {
+		if displayGroup != "" {
+			buf.WriteString(fmt.Sprintf("## %s\n\n", displayGroup))
 		}
-		buf.WriteString(fmt.Sprintf("## %s\n\n", displayGroup))
-		for _, linode := range displayGroupLinodes {
-			if !linode.IsRunning() {
+		for _, n := range nodes {
+			var hostname string
+			for _, ip := range n.ips {
+				if ip.IsPublic() {
+					hostname = ip.IP
+					break
+				}
+			}
+			if hostname == "" {
+				// no public ip?
 				continue
 			}
-			entry := sshEntry{Host: linode.Label, Id: linode.Id}
+			entry := sshEntry{Host: n.node.Label}
 			keyvals := make(map[string]string)
-			keyvals["#"] = fmt.Sprintf("%s | Linode ID %d | %dm Ram", linode.DisplayGroup, linode.Id, linode.Ram)
-			keyvals["Hostname"] = linode.PublicIp()
-			if self.config.User != "" {
-				keyvals["User"] = self.config.User
+			keyvals["#"] = fmt.Sprintf("Linode ID %d", n.node.ID)
+			keyvals["Hostname"] = hostname
+			if config.User != "" {
+				keyvals["User"] = config.User
 			}
-			if self.config.IdentityFile != "" {
-				keyvals["IdentityFile"] = self.config.IdentityFile
+			if config.IdentityFile != "" {
+				keyvals["IdentityFile"] = config.IdentityFile
 			}
 			entry.KeyVals = keyvals
-			if err := template.Execute(buf, entry); err != nil {
+			if err := tpl.Execute(buf, entry); err != nil {
 				return nil, err
 			}
+			c.count++
 		}
 	}
+	buf.Write(endToken)
+	buf.WriteRune('\n')
 
-	buf.Write(append(END_TOKEN, '\n'))
 	return buf.Bytes(), nil
-}
-
-func fileExists(path string) bool {
-	exists := true
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		exists = false
-	}
-	return exists
 }
 
 func copyFile(in, out string) error {

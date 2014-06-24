@@ -1,6 +1,7 @@
 [linode]
 api-key = secretapikey         # Required
-display-group = Staging        # Optional - output only hosts in this display group.
+display-group = Staging        # Optional - If set, only consider hosts in this display group.
 display-group = Production     #            Multiple display groups are allowed 
-user = bill                    # Optional - ssh user to use
-identity-file = ~/.ssh/linode  # Optional - ssh identity file
+user = bill                    # Optional - SSH user to use
+identity-file = ~/.ssh/linode  # Optional - SSH identity file
+running = false                # Optional - If true, only consider running Linodes
