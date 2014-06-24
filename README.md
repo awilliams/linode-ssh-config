@@ -23,7 +23,7 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
  
  * Create your `linode-ssh-config` config file, editing your API key and other variables.
 
-  `cp linode-ssh-config.ini.example ~/.linode-ssh-config.ini`
+  `cp linode-ssh-config.example.ini ~/.linode-ssh-config.ini`
 
  * First test the output.
 
@@ -33,7 +33,7 @@ See [Simplify Your Life With an SSH Config File](http://nerderati.com/2011/03/si
   
   `cp ~/.ssh/config ~/.ssh/config.bak`
 
- * Update the `~/.ssh/config` file.
+ * **Update the `~/.ssh/config` file.**
 
   `./linode-ssh-config --update`
   
